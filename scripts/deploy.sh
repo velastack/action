@@ -15,6 +15,9 @@ if [ -n "${VELA_CLI_VERSION:-}" ]; then
 		*[:/]*) VELA=(npx --yes "$VELA_CLI_VERSION") ;;
 		*) VELA=(npx --yes "vela@${VELA_CLI_VERSION}") ;;
 	esac
+	# Asking for a version explicitly means running that version. Without this the
+	# CLI would hand the command straight back to whatever the project pins.
+	export VELA_NO_DELEGATE=1
 elif [ -x node_modules/.bin/vela ]; then
 	VELA=(node_modules/.bin/vela)
 else
