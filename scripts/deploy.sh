@@ -37,6 +37,7 @@ if [ -n "${VELA_DOMAIN:-}" ]; then args+=(--domain "$VELA_DOMAIN"); fi
 if [ -n "${VELA_PROJECT:-}" ]; then args+=(--project "$VELA_PROJECT"); fi
 if [ -n "${VELA_HEALTH_PATH:-}" ]; then args+=(--health-path "$VELA_HEALTH_PATH"); fi
 if [ -n "${VELA_SSH_PORT:-}" ]; then args+=(--ssh-port "$VELA_SSH_PORT"); fi
+if [ "${VELA_REMOTE_DB:-false}" = "true" ]; then args+=(--remote-db); fi
 
 echo "::group::vela deploy $VELA_SERVER --env $ENVIRONMENT"
 "${VELA[@]}" "${args[@]}"

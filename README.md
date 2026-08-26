@@ -59,6 +59,7 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | `domain` | | | Hostname(s) to serve on, comma separated |
 | `project` | | | Override the project name |
 | `health-path` | | `/` | Path the health check requests |
+| `remote-db` | | `false` | Build against the server's database — see below |
 | `working-directory` | | `.` | Directory holding the app |
 | `node-version` | | `.nvmrc`, else `22` | Node.js version to build with |
 | `install` | | `true` | Run `npm ci` first |
@@ -70,6 +71,22 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | --- | --- |
 | `release` | Identifier of the release that was activated |
 | `url` | URL the app is served on |
+
+## Pages that prerender from data
+
+A prerendered page is rendered once, at build time, against whatever database the build can see. On a runner that is an empty throwaway database, so those pages come out full of defaults — a site name of "Acme", empty lists, missing copy — even though the running app is fine.
+
+Set `remote-db: true` and the build renders against the database it is being deployed to, tunnelled over the same SSH connection. The superuser credentials come off the server, so no new secrets go into CI.
+
+```yaml
+      - uses: velastack/action@v1
+        with:
+          server: root@your-server
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          remote-db: true
+```
+
+It is off by default because it lets a build read production data, which is only what you want when you know your pages depend on it. It also needs the environment to have been deployed at least once.
 
 ## Secrets and environment
 

@@ -32,6 +32,10 @@ inputs:
   health-path:
     description: 'Path the post-deploy health check requests.'
     required: false
+  remote-db:
+    description: 'Render the build against the database on the server, over the SSH connection. Needed when pages are prerendered from data, which would otherwise be built against an empty database.'
+    required: false
+    default: 'false' 
   working-directory:
     description: 'Directory holding the app, when it is not the repository root.'
     required: false
@@ -99,6 +103,7 @@ runs:
         VELA_DOMAIN: ${{ inputs.domain }}
         VELA_PROJECT: ${{ inputs.project }}
         VELA_HEALTH_PATH: ${{ inputs.health-path }}
+        VELA_REMOTE_DB: ${{ inputs.remote-db }}
         VELA_SSH_PORT: ${{ inputs.ssh-port }}
         VELA_CLI_VERSION: ${{ inputs.vela-version }}
         VELA_IDENTITY: ${{ steps.ssh.outputs.identity }}
