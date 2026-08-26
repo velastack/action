@@ -37,9 +37,8 @@ inputs:
     required: false
     default: '.'
   node-version:
-    description: 'Node.js version to build with.'
+    description: 'Node.js version to build with. Defaults to the project\'s .nvmrc or .node-version, then to 22.'
     required: false
-    default: '22'
   install:
     description: 'Run `npm ci` before deploying. Turn off if an earlier step already installed dependencies.'
     required: false
@@ -59,10 +58,18 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve the Node.js version
+      id: node
+      shell: bash
+      env:
+        VELA_NODE_VERSION: ${{ inputs.node-version }}
+        VELA_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: ${{ github.action_path }}/scripts/node-version.sh
+
     - name: Set up Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: ${{ steps.node.outputs.version }}
         cache: npm
         cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 

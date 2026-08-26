@@ -60,7 +60,7 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | `project` | | | Override the project name |
 | `health-path` | | `/` | Path the health check requests |
 | `working-directory` | | `.` | Directory holding the app |
-| `node-version` | | `22` | Node.js version to build with |
+| `node-version` | | `.nvmrc`, else `22` | Node.js version to build with |
 | `install` | | `true` | Run `npm ci` first |
 | `vela-version` | | | Version of the CLI to run. Defaults to the one the project pins |
 
