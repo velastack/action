@@ -1,0 +1,103 @@
+name: 'VelaStack Deploy'
+description: 'Build a VelaStack app and deploy it to your own server over SSH.'
+author: 'VelaStack'
+
+branding:
+  icon: 'upload-cloud'
+  color: 'orange'
+
+inputs:
+  server:
+    description: 'SSH target for the server, as user@host or host. The server must already have been prepared with `vela provision`.'
+    required: true
+  ssh-key:
+    description: 'Private SSH key with access to the server. Store it as a repository secret and pass it here.'
+    required: true
+  ssh-port:
+    description: 'SSH port, when the server does not listen on 22.'
+    required: false
+  known-hosts:
+    description: 'Contents for known_hosts. When omitted the host key is fetched with ssh-keyscan on first connect.'
+    required: false
+  environment:
+    description: 'Environment to deploy. Defaults to prod.'
+    required: false
+    default: 'prod'
+  domain:
+    description: 'Hostname(s) to serve the app on, comma separated. Only needed the first time, or when it changes.'
+    required: false
+  project:
+    description: 'Override the project name.'
+    required: false
+  health-path:
+    description: 'Path the post-deploy health check requests.'
+    required: false
+  working-directory:
+    description: 'Directory holding the app, when it is not the repository root.'
+    required: false
+    default: '.'
+  node-version:
+    description: 'Node.js version to build with.'
+    required: false
+    default: '22'
+  install:
+    description: 'Run `npm ci` before deploying. Turn off if an earlier step already installed dependencies.'
+    required: false
+    default: 'true'
+  vela-version:
+    description: 'Version of the vela CLI to run, or any npx-installable spec. Defaults to the one this project pins in its devDependencies.'
+    required: false
+
+outputs:
+  release:
+    description: 'Identifier of the release that was activated.'
+    value: ${{ steps.deploy.outputs.release }}
+  url:
+    description: 'URL the deployed app is served on.'
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Configure SSH
+      id: ssh
+      shell: bash
+      env:
+        VELA_SSH_KEY: ${{ inputs.ssh-key }}
+        VELA_KNOWN_HOSTS: ${{ inputs.known-hosts }}
+        VELA_SERVER: ${{ inputs.server }}
+        VELA_SSH_PORT: ${{ inputs.ssh-port }}
+      run: ${{ github.action_path }}/scripts/ssh-setup.sh
+
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm ci
+
+    - name: Deploy
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        VELA_SERVER: ${{ inputs.server }}
+        VELA_ENVIRONMENT: ${{ inputs.environment }}
+        VELA_DOMAIN: ${{ inputs.domain }}
+        VELA_PROJECT: ${{ inputs.project }}
+        VELA_HEALTH_PATH: ${{ inputs.health-path }}
+        VELA_SSH_PORT: ${{ inputs.ssh-port }}
+        VELA_CLI_VERSION: ${{ inputs.vela-version }}
+        VELA_IDENTITY: ${{ steps.ssh.outputs.identity }}
+      run: ${{ github.action_path }}/scripts/deploy.sh
+
+    - name: Remove the deploy key
+      if: always()
+      shell: bash
+      run: rm -f "${{ steps.ssh.outputs.identity }}"
