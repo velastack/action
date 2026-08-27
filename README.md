@@ -6,11 +6,19 @@ The action builds the app on the runner and hands it to `vela deploy` over SSH â
 
 ## Before you start
 
-The server has to be prepared once, from your machine:
+The server has to be prepared once, and the app deployed once, from your machine:
 
 ```sh
 vela provision root@your-server
+vela deploy --server root@your-server --domain example.com
+git add .vela/project.json && git commit -m "Add the vela project id"
 ```
+
+That first deploy is what gives the project its permanent app id. The action
+refuses to run until `.vela/project.json` is committed: a runner that finds no
+id mints a new one, and since its checkout is thrown away at the end of the job,
+every deploy would land as a brand new app and orphan the last one on the
+server.
 
 Then give the action a way in:
 

@@ -8,6 +8,33 @@
 # with locally.
 set -euo pipefail
 
+# CI must never mint a project identity. `vela` writes a fresh app id into
+# .vela/project.json whenever it finds none, and a runner's copy of the
+# repository is thrown away at the end of the job - so every deploy would land
+# as a brand new app and leave the previous one orphaned on the server, with its
+# own database, ports and systemd units.
+#
+# The file is created by the first `vela deploy` (or `vela link`) run locally,
+# and belongs in version control.
+PROJECT_FILE=.vela/project.json
+if [ ! -f "$PROJECT_FILE" ] || [ -z "$(jq -r '.appId // .projectId // ""' "$PROJECT_FILE" 2>/dev/null)" ]; then
+	echo "::error title=No vela project id::$PROJECT_FILE is missing or has no app id"
+	cat >&2 <<-'MSG'
+
+		This project has no committed vela identity, so deploying from CI would
+		create a new app on every run.
+
+		Set it up once from a checkout on your own machine:
+
+		  vela deploy --server <user@server> --domain <your-domain>
+		  git add .vela/project.json && git commit -m "Add the vela project id"
+
+		Then re-run this workflow.
+
+	MSG
+	exit 1
+fi
+
 if [ -n "${VELA_CLI_VERSION:-}" ]; then
 	# A bare version means npm; anything with a slash or scheme (github:owner/repo,
 	# a git URL, a tarball) is passed to npx as written.
@@ -24,11 +51,14 @@ else
 	VELA=(npx --yes vela)
 fi
 
-ENVIRONMENT=${VELA_ENVIRONMENT:-prod}
+# `target` is the input; `environment` is what it used to be called and still
+# works, so a workflow written against the old action keeps deploying.
+TARGET=${VELA_TARGET:-${VELA_ENVIRONMENT:-production}}
 
 args=(
-	deploy "$VELA_SERVER"
-	--env "$ENVIRONMENT"
+	deploy
+	-t "$TARGET"
+	--server "$VELA_SERVER"
 	--identity "$VELA_IDENTITY"
 	--accept-host-keys
 )
@@ -39,13 +69,15 @@ if [ -n "${VELA_HEALTH_PATH:-}" ]; then args+=(--health-path "$VELA_HEALTH_PATH"
 if [ -n "${VELA_SSH_PORT:-}" ]; then args+=(--ssh-port "$VELA_SSH_PORT"); fi
 if [ "${VELA_REMOTE_DB:-false}" = "true" ]; then args+=(--remote-db); fi
 
-echo "::group::vela deploy $VELA_SERVER --env $ENVIRONMENT"
+echo "::group::vela deploy -t $TARGET --server $VELA_SERVER"
 "${VELA[@]}" "${args[@]}"
 echo "::endgroup::"
 
 # Report the result from the server rather than by scraping the deploy output.
-status=$("${VELA[@]}" status "$VELA_SERVER" \
-	--env "$ENVIRONMENT" --identity "$VELA_IDENTITY" --accept-host-keys --json 2>/dev/null || echo '[]')
+# Not error-suppressed: a status call that breaks would otherwise emit an empty
+# release and a summary reading "unknown", which looks like a successful deploy.
+status=$("${VELA[@]}" status -t "$TARGET" --server "$VELA_SERVER" \
+	--identity "$VELA_IDENTITY" --accept-host-keys --json)
 
 release=$(printf '%s' "$status" | jq -r '.[0].activeRelease // ""')
 domain=$(printf '%s' "$status" | jq -r '.[0].domain // ""')
@@ -62,7 +94,7 @@ if [ -n "$domain" ]; then url="https://${domain%%,*}"; fi
 	echo
 	echo "| | |"
 	echo "|---|---|"
-	echo "| Environment | \`$ENVIRONMENT\` |"
+	echo "| Target | \`$TARGET\` |"
 	echo "| Release | \`${release:-unknown}\` |"
 	if [ -n "$url" ]; then echo "| URL | $url |"; fi
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"

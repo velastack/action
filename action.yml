@@ -19,10 +19,12 @@ inputs:
   known-hosts:
     description: 'Contents for known_hosts. When omitted the host key is fetched with ssh-keyscan on first connect.'
     required: false
-  environment:
-    description: 'Environment to deploy. Defaults to prod.'
+  target:
+    description: 'Which copy of the app to deploy: production, or a name you chose such as staging. Defaults to production.'
     required: false
-    default: 'prod'
+  environment:
+    description: 'Deprecated name for `target`. Still honoured when `target` is unset.'
+    required: false
   domain:
     description: 'Hostname(s) to serve the app on, comma separated. Only needed the first time, or when it changes.'
     required: false
@@ -99,6 +101,7 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         VELA_SERVER: ${{ inputs.server }}
+        VELA_TARGET: ${{ inputs.target }}
         VELA_ENVIRONMENT: ${{ inputs.environment }}
         VELA_DOMAIN: ${{ inputs.domain }}
         VELA_PROJECT: ${{ inputs.project }}
