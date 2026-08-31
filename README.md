@@ -69,7 +69,7 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | `health-path` | | `/` | Path the health check requests |
 | `remote-db` | | `false` | Build against the server's database — see below |
 | `working-directory` | | `.` | Directory holding the app |
-| `node-version` | | `.nvmrc`, else `22` | Node.js version to build with |
+| `node-version` | | `.nvmrc`, else `24` | Node.js version to build with |
 | `install` | | `true` | Run `npm ci` first |
 | `vela-version` | | | Version of the CLI to run. Defaults to the one the project pins |
 

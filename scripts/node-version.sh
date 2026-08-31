@@ -25,7 +25,7 @@ resolve() {
 			fi
 		fi
 	done
-	printf '22'
+	printf '24'
 }
 
 VERSION=$(resolve)

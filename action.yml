@@ -43,7 +43,7 @@ inputs:
     required: false
     default: '.'
   node-version:
-    description: 'Node.js version to build with. Defaults to .nvmrc or .node-version in the project, then to 22.'
+    description: 'Node.js version to build with. Defaults to .nvmrc or .node-version in the project, then to 24.'
     required: false
   install:
     description: 'Run `npm ci` before deploying. Turn off if an earlier step already installed dependencies.'
