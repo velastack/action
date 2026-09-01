@@ -35,9 +35,8 @@ inputs:
     description: 'Path the post-deploy health check requests.'
     required: false
   remote-db:
-    description: 'Render the build against the database on the server, over the SSH connection. Needed when pages are prerendered from data, which would otherwise be built against an empty database.'
+    description: 'Render the build against the database on the server, over the SSH connection. Left unset, the CLI decides: on once the target has been deployed to, which is what keeps pages prerendered from data off a runner''s empty database. Set false to build against a throwaway one.'
     required: false
-    default: 'false' 
   working-directory:
     description: 'Directory holding the app, when it is not the repository root.'
     required: false

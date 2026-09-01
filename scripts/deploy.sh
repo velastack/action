@@ -67,7 +67,13 @@ if [ -n "${VELA_DOMAIN:-}" ]; then args+=(--domain "$VELA_DOMAIN"); fi
 if [ -n "${VELA_PROJECT:-}" ]; then args+=(--project "$VELA_PROJECT"); fi
 if [ -n "${VELA_HEALTH_PATH:-}" ]; then args+=(--health-path "$VELA_HEALTH_PATH"); fi
 if [ -n "${VELA_SSH_PORT:-}" ]; then args+=(--ssh-port "$VELA_SSH_PORT"); fi
-if [ "${VELA_REMOTE_DB:-false}" = "true" ]; then args+=(--remote-db); fi
+# Three states, not two: passing neither flag is what lets the CLI apply its own
+# default, which is to build against the deployed database once there is one.
+# Forcing a value here would make every CI deploy opt out of that silently.
+case "${VELA_REMOTE_DB:-}" in
+	true) args+=(--remote-db) ;;
+	false) args+=(--no-remote-db) ;;
+esac
 
 echo "::group::vela deploy -t $TARGET --server $VELA_SERVER"
 "${VELA[@]}" "${args[@]}"
