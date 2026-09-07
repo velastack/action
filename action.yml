@@ -51,6 +51,21 @@ inputs:
   vela-version:
     description: 'Version of the vela CLI to run, or any npx-installable spec. Defaults to the one this project pins in its devDependencies.'
     required: false
+  api-key:
+    description: 'velastack.dev API key, so the deploy is recorded on the linked project and previews get a free velastack.app hostname. Create one at https://velastack.dev/api-keys/new and store it as a repository secret. Without it the deploy still runs; it just is not logged.'
+    required: false
+  action:
+    description: 'What to do: `deploy`, `destroy` (remove the target from the server), or `auto`, which deploys on every event except a closed pull request, where it removes the preview.'
+    required: false
+    default: 'auto'
+  comment:
+    description: 'On pull requests, keep one comment up to date with the preview URL.'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Token the pull request comment is posted with. Defaults to the workflow token, which needs `pull-requests: write`.'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   release:
@@ -59,6 +74,12 @@ outputs:
   url:
     description: 'URL the deployed app is served on.'
     value: ${{ steps.deploy.outputs.url }}
+  hostnames:
+    description: 'Every hostname the target is served on, comma separated.'
+    value: ${{ steps.deploy.outputs.hostnames }}
+  target:
+    description: 'The target that was deployed or removed, e.g. `production` or `preview:my-branch`.'
+    value: ${{ steps.deploy.outputs.target }}
 
 runs:
   using: composite
@@ -109,7 +130,28 @@ runs:
         VELA_SSH_PORT: ${{ inputs.ssh-port }}
         VELA_CLI_VERSION: ${{ inputs.vela-version }}
         VELA_IDENTITY: ${{ steps.ssh.outputs.identity }}
+        VELA_API_KEY: ${{ inputs.api-key }}
+        VELA_ACTION: ${{ inputs.action }}
+        VELA_EVENT_NAME: ${{ github.event_name }}
+        VELA_EVENT_ACTION: ${{ github.event.action }}
+        VELA_HEAD_REF: ${{ github.head_ref }}
       run: ${{ github.action_path }}/scripts/deploy.sh
+
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true' && startsWith(github.event_name, 'pull_request')
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        GH_REPO: ${{ github.repository }}
+        VELA_PR_NUMBER: ${{ github.event.pull_request.number }}
+        VELA_OUTCOME: ${{ steps.deploy.outcome }}
+        VELA_MODE: ${{ steps.deploy.outputs.mode }}
+        VELA_TARGET: ${{ steps.deploy.outputs.target }}
+        VELA_URL: ${{ steps.deploy.outputs.url }}
+        VELA_HOSTNAMES: ${{ steps.deploy.outputs.hostnames }}
+        VELA_RELEASE: ${{ steps.deploy.outputs.release }}
+        VELA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: ${{ github.action_path }}/scripts/comment.sh
 
     - name: Remove the deploy key
       if: always()

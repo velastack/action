@@ -55,6 +55,77 @@ That is the whole thing. The action installs dependencies, builds, uploads a rel
 
 Use a `concurrency` group so two pushes cannot deploy over each other.
 
+## Recording deploys on velastack.dev
+
+A project that has been `vela link`ed can have every deploy from CI show up on
+its dashboard: who deployed, which commit, which target, where it landed. Create
+an API key at <https://velastack.dev/api-keys/new>, store it as a repository
+secret, and pass it in:
+
+```yaml
+      - uses: velastack/action@v1
+        with:
+          server: root@your-server
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          api-key: ${{ secrets.VELA_API_KEY }}
+```
+
+Without the key the deploy runs exactly the same; it just is not logged.
+
+## Preview deployments for pull requests
+
+With the project linked and an API key in place, the same step deploys every
+pull request as its own copy of the app — own database, own process, own
+hostname — and removes it when the pull request closes. Nothing else changes
+in the workflow except which events run it:
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: vela-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: velastack/action@v1
+        with:
+          server: root@your-server
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          api-key: ${{ secrets.VELA_API_KEY }}
+          domain: example.com
+```
+
+A push to `main` deploys production, as before. A pull request deploys
+`preview:<branch>`, which lands at `<project>--<branch>.velastack.app` and is
+posted to the pull request as a comment that updates on every push. Closing
+the pull request removes the preview from the server and retires the hostname.
+
+Previews never inherit `domain`: that is production's. To serve previews on
+your own domain as well, add a preview base on the project's Domains page on
+velastack.dev and point `*.preview.example.com` at the server's origin name.
+
+Two things to know about `velastack.app` hostnames: requests pass through
+Cloudflare, so uploads are capped at 100 MB and a quiet realtime connection
+reconnects after about 100 seconds. A custom domain has neither limit.
+
+Each preview is a full instance, so a server hosts as many previews as it has
+memory for. Nothing is pruned automatically yet; close pull requests to free
+them.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -72,6 +143,10 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | `node-version` | | `.nvmrc`, else `24` | Node.js version to build with |
 | `install` | | `true` | Run `npm ci` first |
 | `vela-version` | | | Version of the CLI to run. Defaults to the one the project pins |
+| `api-key` | | | velastack.dev API key. With it, every deploy is recorded on the linked project and previews get a hostname |
+| `action` | | `auto` | `deploy`, `destroy`, or `auto`: deploy, except on a closed pull request, which removes the preview |
+| `comment` | | `true` | Keep one comment on the pull request up to date with the preview URL |
+| `github-token` | | workflow token | Token the comment is posted with; needs `pull-requests: write` |
 
 ## Outputs
 
@@ -79,6 +154,8 @@ Use a `concurrency` group so two pushes cannot deploy over each other.
 | --- | --- |
 | `release` | Identifier of the release that was activated |
 | `url` | URL the app is served on |
+| `hostnames` | Every hostname the target is served on, comma separated |
+| `target` | The target that was deployed or removed |
 
 ## Pages that prerender from data
 
