@@ -55,9 +55,12 @@ inputs:
     description: 'velastack.dev API key, so the deploy is recorded on the linked project and previews get a free velastack.app hostname. Create one at https://velastack.dev/api-keys/new and store it as a repository secret. Without it the deploy still runs; it just is not logged.'
     required: false
   action:
-    description: 'What to do: `deploy`, `destroy` (remove the target from the server), or `auto`, which deploys on every event except a closed pull request, where it removes the preview.'
+    description: 'What to do: `deploy`, `destroy` (remove the target from the server), or `auto`, which deploys on every event except a closed pull request, where it removes the preview. `auto` never removes anything but a preview.'
     required: false
     default: 'auto'
+  confirm-name:
+    description: 'The app name, typed in full, when `action: destroy` targets production or a named environment such as staging. Never needed for previews. Requires a vela that understands `--confirm`.'
+    required: false
   comment:
     description: 'On pull requests, keep one comment up to date with the preview URL.'
     required: false
@@ -132,6 +135,7 @@ runs:
         VELA_IDENTITY: ${{ steps.ssh.outputs.identity }}
         VELA_API_KEY: ${{ inputs.api-key }}
         VELA_ACTION: ${{ inputs.action }}
+        VELA_CONFIRM_NAME: ${{ inputs.confirm-name }}
         VELA_EVENT_NAME: ${{ github.event_name }}
         VELA_EVENT_ACTION: ${{ github.event.action }}
         VELA_HEAD_REF: ${{ github.head_ref }}

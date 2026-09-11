@@ -63,17 +63,34 @@ if [ -n "${VELA_TARGET:-}" ]; then
 	TARGET=$VELA_TARGET
 elif [ -n "${VELA_ENVIRONMENT:-}" ]; then
 	TARGET=$VELA_ENVIRONMENT
-elif [ "$is_pull_request" = 1 ] && [ -n "${VELA_HEAD_REF:-}" ]; then
+elif [ "$is_pull_request" = 1 ]; then
+	# A pull request with no branch name is not a thing that should happen, and
+	# the one target it must never quietly become is production: on a `closed`
+	# event that would remove the live site.
+	if [ -z "${VELA_HEAD_REF:-}" ]; then
+		echo "::error title=No branch for the preview::the pull request event carries no head ref, so there is no preview to name"
+		exit 1
+	fi
 	TARGET="preview:$VELA_HEAD_REF"
 else
 	TARGET=production
 fi
 
+is_preview=0
+case "$TARGET" in preview:*) is_preview=1 ;; esac
+
 # Deploy, or take a preview down: `auto` removes the preview when its pull
-# request closes and deploys on every other event.
+# request closes and deploys on every other event. It only ever removes a
+# preview. Anything else that reaches a `closed` event with `auto` - a
+# workflow that sets `target: staging` and includes `closed` in its trigger,
+# say - is a mistake, and the action refuses rather than guess.
 MODE=${VELA_ACTION:-auto}
 if [ "$MODE" = auto ]; then
 	if [ "$is_pull_request" = 1 ] && [ "${VELA_EVENT_ACTION:-}" = closed ]; then
+		if [ "$is_preview" != 1 ]; then
+			echo "::error title=Refusing to remove $TARGET::action: auto only removes previews, and \`$TARGET\` is not one. Set action: deploy, or skip this job on closed pull requests."
+			exit 1
+		fi
 		MODE=destroy
 	else
 		MODE=deploy
@@ -84,8 +101,30 @@ ssh_args=(--server "$VELA_SERVER" --identity "$VELA_IDENTITY" --accept-host-keys
 if [ -n "${VELA_SSH_PORT:-}" ]; then ssh_args+=(--ssh-port "$VELA_SSH_PORT"); fi
 
 if [ "$MODE" = destroy ]; then
+	destroy_args=(destroy deployment -t "$TARGET" "${ssh_args[@]}" --yes)
+	if [ "$is_preview" = 1 ]; then
+		# A preview is disposable by definition, and one that keeps its database
+		# keeps its port pair and disk with it. The CLI snapshots the data into
+		# the server's trash before purging.
+		destroy_args+=(--purge)
+	else
+		# Removing production or a named environment from CI needs the app name
+		# typed into the workflow, the same way the CLI asks for it on a terminal.
+		# `--yes` on its own is not enough for that, and older CLIs (which still
+		# accept it) are refused rather than trusted.
+		if [ -z "${VELA_CONFIRM_NAME:-}" ]; then
+			echo "::error title=Refusing to remove $TARGET::removing a target other than a preview needs the confirm-name input set to the app's name"
+			exit 1
+		fi
+		if ! "${VELA[@]}" destroy deployment --help 2>/dev/null | grep -q -- '--confirm'; then
+			echo "::error title=Refusing to remove $TARGET::this version of vela cannot confirm a destroy by name; upgrade the project's vela devDependency"
+			exit 1
+		fi
+		destroy_args+=(--confirm "$VELA_CONFIRM_NAME")
+	fi
+
 	echo "::group::vela destroy deployment -t $TARGET --server $VELA_SERVER"
-	"${VELA[@]}" destroy deployment -t "$TARGET" "${ssh_args[@]}" --yes
+	"${VELA[@]}" "${destroy_args[@]}"
 	echo "::endgroup::"
 
 	{

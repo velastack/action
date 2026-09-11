@@ -112,7 +112,15 @@ jobs:
 A push to `main` deploys production, as before. A pull request deploys
 `preview:<branch>`, which lands at `<project>--<branch>.velastack.app` and is
 posted to the pull request as a comment that updates on every push. Closing
-the pull request removes the preview from the server and retires the hostname.
+the pull request removes the preview from the server, database and uploads
+included (the CLI keeps a snapshot in the server's trash for two weeks), and
+retires the hostname.
+
+The default `action: auto` only ever removes previews. A workflow that sets
+`target` to production or a named environment and still runs on `closed`
+events fails on that event rather than removing the target; to remove one of
+those from CI on purpose, set `action: destroy` and `confirm-name` to the
+app's name.
 
 Previews never inherit `domain`: that is production's. To serve previews on
 your own domain as well, add a preview base on the project's Domains page on
@@ -144,7 +152,8 @@ them.
 | `install` | | `true` | Run `npm ci` first |
 | `vela-version` | | | Version of the CLI to run. Defaults to the one the project pins |
 | `api-key` | | | velastack.dev API key. With it, every deploy is recorded on the linked project and previews get a hostname |
-| `action` | | `auto` | `deploy`, `destroy`, or `auto`: deploy, except on a closed pull request, which removes the preview |
+| `action` | | `auto` | `deploy`, `destroy`, or `auto`: deploy, except on a closed pull request, which removes the preview. `auto` never removes anything but a preview |
+| `confirm-name` | | | The app's name, required when `action: destroy` targets production or a named environment. Not needed for previews |
 | `comment` | | `true` | Keep one comment on the pull request up to date with the preview URL |
 | `github-token` | | workflow token | Token the comment is posted with; needs `pull-requests: write` |
 
