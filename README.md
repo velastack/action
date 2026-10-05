@@ -122,6 +122,16 @@ events fails on that event rather than removing the target; to remove one of
 those from CI on purpose, set `action: destroy` and `confirm-name` to the
 app's name.
 
+A push that is still being tested when its pull request closes does not bring
+the preview back. The `closed` run skips any jobs that gate the deploy, so it
+usually removes the preview first, and a `concurrency` group only queues jobs
+that have started. To cover that, the action reads the pull request's state
+before deploying a preview and skips the deploy if it has closed. The CLI also
+checks on the server, in releases after vela 0.15.0: a deploy that began before
+its target was removed is dropped there, even when the close happens
+mid-build. Either way the step succeeds with `mode: skipped`, and the pull
+request comment is left as the cleanup wrote it.
+
 Previews never inherit `domain`: that is production's. To serve previews on
 your own domain as well, add a preview base on the project's Domains page on
 velastack.dev and point `*.preview.example.com` at the server's origin name.
@@ -155,7 +165,7 @@ them.
 | `action` | | `auto` | `deploy`, `destroy`, or `auto`: deploy, except on a closed pull request, which removes the preview. `auto` never removes anything but a preview |
 | `confirm-name` | | | The app's name, required when `action: destroy` targets production or a named environment. Not needed for previews |
 | `comment` | | `true` | Keep one comment on the pull request up to date with the preview URL |
-| `github-token` | | workflow token | Token the comment is posted with; needs `pull-requests: write` |
+| `github-token` | | workflow token | Token the comment is posted with, and the pull request's state is read with before a preview deploys; needs `pull-requests: write` |
 
 ## Outputs
 
@@ -165,6 +175,7 @@ them.
 | `url` | URL the app is served on |
 | `hostnames` | Every hostname the target is served on, comma separated |
 | `target` | The target that was deployed or removed |
+| `mode` | `deploy`, `destroy`, or `skipped` when a preview was not deployed because its pull request had closed |
 
 ## Pages that prerender from data
 

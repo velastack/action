@@ -12,6 +12,9 @@ MARKER='<!-- vela-preview -->'
 
 [ -n "${VELA_PR_NUMBER:-}" ] || exit 0
 [ "${VELA_OUTCOME:-skipped}" != skipped ] || exit 0
+# A preview skipped because its pull request closed: the cleanup run has the
+# last word on the comment, and "deploy failed" would be wrong.
+[ "${VELA_MODE:-}" != skipped ] || exit 0
 if ! command -v gh >/dev/null 2>&1; then
 	echo "::notice::gh is not available on this runner, so the preview comment was not posted"
 	exit 0

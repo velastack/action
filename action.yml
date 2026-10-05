@@ -66,7 +66,7 @@ inputs:
     required: false
     default: 'true'
   github-token:
-    description: 'Token the pull request comment is posted with. Defaults to the workflow token, which needs `pull-requests: write`.'
+    description: 'Token the pull request comment is posted with, and the pull request''s state is read with before a preview deploys. Defaults to the workflow token, which needs `pull-requests: write`.'
     required: false
     default: ${{ github.token }}
 
@@ -83,6 +83,9 @@ outputs:
   target:
     description: 'The target that was deployed or removed, e.g. `production` or `preview:my-branch`.'
     value: ${{ steps.deploy.outputs.target }}
+  mode:
+    description: 'What happened: `deploy`, `destroy`, or `skipped` when a preview was not deployed because its pull request had closed.'
+    value: ${{ steps.deploy.outputs.mode }}
 
 runs:
   using: composite
@@ -139,6 +142,9 @@ runs:
         VELA_EVENT_NAME: ${{ github.event_name }}
         VELA_EVENT_ACTION: ${{ github.event.action }}
         VELA_HEAD_REF: ${{ github.head_ref }}
+        VELA_PR_NUMBER: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        GH_REPO: ${{ github.repository }}
       run: ${{ github.action_path }}/scripts/deploy.sh
 
     - name: Comment on the pull request
