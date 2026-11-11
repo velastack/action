@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: velastack/action@v1
+      - uses: velastack/action@main
         with:
           server: root@your-server
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -63,7 +63,7 @@ an API key at <https://velastack.dev/api-keys/new>, store it as a repository
 secret, and pass it in:
 
 ```yaml
-      - uses: velastack/action@v1
+      - uses: velastack/action@main
         with:
           server: root@your-server
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: velastack/action@v1
+      - uses: velastack/action@main
         with:
           server: root@your-server
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -158,7 +158,7 @@ them.
 | `health-path` | | `/` | Path the health check requests |
 | `remote-db` | | `false` | Build against the server's database — see below |
 | `working-directory` | | `.` | Directory holding the app |
-| `node-version` | | `.nvmrc`, else `24` | Node.js version to build with |
+| `node-version` | | `.nvmrc`, else `26` | Node.js version to build with |
 | `install` | | `true` | Run `npm ci` first |
 | `vela-version` | | | Version of the CLI to run. Defaults to the one the project pins |
 | `api-key` | | | velastack.dev API key. With it, every deploy is recorded on the linked project and previews get a hostname |
@@ -184,7 +184,7 @@ A prerendered page is rendered once, at build time, against whatever database th
 Set `remote-db: true` and the build renders against the database it is being deployed to, tunnelled over the same SSH connection. The superuser credentials come off the server, so no new secrets go into CI.
 
 ```yaml
-      - uses: velastack/action@v1
+      - uses: velastack/action@main
         with:
           server: root@your-server
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -208,7 +208,7 @@ A deploy never reads, uploads, or overwrites them.
 Anything the **build** needs — as opposed to the running app — belongs in the workflow, because it has to exist on the runner:
 
 ```yaml
-      - uses: velastack/action@v1
+      - uses: velastack/action@main
         env:
           POCKETBASE_SUPERUSER_EMAIL: ${{ secrets.POCKETBASE_SUPERUSER_EMAIL }}
           POCKETBASE_SUPERUSER_PASSWORD: ${{ secrets.POCKETBASE_SUPERUSER_PASSWORD }}
