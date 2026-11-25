@@ -1,0 +1,101 @@
+name: CI
+
+# The action deploys to a real server, which CI does not have. What can be
+# checked without one is checked here: the scripts lint, and the steps that
+# run before the deploy (reading the project, setting up Node with or without
+# an npm cache, installing with npm or pnpm) work on a real runner.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: shellcheck -x -P SCRIPTDIR -S warning scripts/*.sh
+      - run: for f in scripts/*.sh; do bash -n "$f"; done
+
+  # Mirrors the first steps of action.yml. Keep the `with:` of setup-node and
+  # the install commands the same as there.
+  setup:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [npm, pnpm]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Make a project
+        run: |
+          mkdir -p app/.vela
+          cd app
+          printf '{"name":"fixture","version":"0.0.0","private":true,"dependencies":{"picocolors":"^1.1.1"}}\n' > package.json
+          printf '{"appId":"fixture-00000000","projectName":"fixture","targets":{"prod":{"server":"deploy@203.0.113.9","domain":"example.com"}}}\n' > .vela/project.json
+          if [ "${{ matrix.manager }}" = pnpm ]; then
+            npm install --global pnpm@10
+            pnpm install --lockfile-only
+            npm uninstall --global pnpm
+          else
+            npm install --package-lock-only
+          fi
+          ls -a
+
+      - name: Read the project
+        id: project
+        env:
+          VELA_SERVER: ''
+          VELA_TARGET: ''
+          VELA_ENVIRONMENT: ''
+          VELA_EVENT_NAME: push
+          VELA_HEAD_REF: ''
+          VELA_WORKING_DIRECTORY: app
+          VELA_INSTALL: 'true'
+        run: scripts/project.sh
+
+      - name: Check what was read
+        env:
+          SERVER: ${{ steps.project.outputs.server }}
+          MANAGER: ${{ steps.project.outputs.manager }}
+          TARGET: ${{ steps.project.outputs.target }}
+        run: |
+          echo "server=$SERVER manager=$MANAGER target=$TARGET"
+          [ "$SERVER" = "deploy@203.0.113.9" ]
+          [ "$MANAGER" = "${{ matrix.manager }}" ]
+          [ "$TARGET" = production ]
+
+      - name: Resolve the Node.js version
+        id: node
+        env:
+          VELA_NODE_VERSION: ''
+          VELA_WORKING_DIRECTORY: app
+        run: scripts/node-version.sh
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: ${{ steps.project.outputs.manager == 'npm' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      - name: Set up pnpm
+        if: steps.project.outputs.manager == 'pnpm'
+        env:
+          VELA_PNPM_VERSION: ${{ steps.project.outputs.pnpm-version }}
+        run: |
+          npm install --global "pnpm@${VELA_PNPM_VERSION:-latest}"
+          echo "pnpm $(pnpm --version)"
+
+      - name: Install dependencies
+        working-directory: app
+        env:
+          VELA_MANAGER: ${{ steps.project.outputs.manager }}
+        run: |
+          if [ "$VELA_MANAGER" = pnpm ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm ci
+          fi
+          test -d node_modules/picocolors

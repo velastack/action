@@ -12,7 +12,7 @@ set -euo pipefail
 	exit 1
 }
 [ -n "${VELA_SERVER:-}" ] || {
-	echo "::error::The server input is required."
+	echo "::error::No server to connect to: set the server input, or commit a .vela/project.json that records one for this target."
 	exit 1
 }
 

@@ -8,8 +8,8 @@ branding:
 
 inputs:
   server:
-    description: 'SSH target for the server, as user@host or host. The server must already have been prepared with `vela provision`.'
-    required: true
+    description: 'SSH target for the server, as user@host or host. Defaults to the server the committed `.vela/project.json` records for the target, which is where the first `vela deploy` put it; previews without a binding of their own use production''s.'
+    required: false
   ssh-key:
     description: 'Private SSH key with access to the server. Store it as a repository secret and pass it here.'
     required: true
@@ -20,13 +20,13 @@ inputs:
     description: 'Contents for known_hosts. When omitted the host key is fetched with ssh-keyscan on first connect.'
     required: false
   target:
-    description: 'Which copy of the app to deploy: production, or a name you chose such as staging. Defaults to production.'
+    description: 'Which copy of the app to deploy: production, or a name you chose such as staging. Defaults to production (the `prod` entry in `.vela/project.json`; `production` and `prod` are the same target), or on a pull request to a preview of its branch.'
     required: false
   environment:
     description: 'Deprecated name for `target`. Still honoured when `target` is unset.'
     required: false
   domain:
-    description: 'Hostname(s) to serve the app on, comma separated. Only needed the first time, or when it changes.'
+    description: 'Hostname(s) to serve the app on, comma separated. Only needed when it changes: the first deploy records it in `.vela/project.json`.'
     required: false
   project:
     description: 'Override the project name.'
@@ -45,7 +45,7 @@ inputs:
     description: 'Node.js version to build with. Defaults to .nvmrc or .node-version in the project, then to 26.'
     required: false
   install:
-    description: 'Run `npm ci` before deploying. Turn off if an earlier step already installed dependencies.'
+    description: 'Install dependencies before deploying: `npm ci` with a package-lock.json, `pnpm install --frozen-lockfile` with only a pnpm-lock.yaml. Turn off if an earlier step already installed them.'
     required: false
     default: 'true'
   vela-version:
@@ -90,6 +90,19 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Read the project
+      id: project
+      shell: bash
+      env:
+        VELA_SERVER: ${{ inputs.server }}
+        VELA_TARGET: ${{ inputs.target }}
+        VELA_ENVIRONMENT: ${{ inputs.environment }}
+        VELA_EVENT_NAME: ${{ github.event_name }}
+        VELA_HEAD_REF: ${{ github.head_ref }}
+        VELA_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        VELA_INSTALL: ${{ inputs.install }}
+      run: ${{ github.action_path }}/scripts/project.sh
+
     - name: Resolve the Node.js version
       id: node
       shell: bash
@@ -102,7 +115,9 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: ${{ steps.node.outputs.version }}
-        cache: npm
+        # Only an npm lockfile is cached on: setup-node fails on a cache whose
+        # lockfile is missing, and pnpm is not installed yet at this point.
+        cache: ${{ steps.project.outputs.manager == 'npm' && 'npm' || '' }}
         cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
     - name: Configure SSH
@@ -111,22 +126,42 @@ runs:
       env:
         VELA_SSH_KEY: ${{ inputs.ssh-key }}
         VELA_KNOWN_HOSTS: ${{ inputs.known-hosts }}
-        VELA_SERVER: ${{ inputs.server }}
+        VELA_SERVER: ${{ steps.project.outputs.server }}
         VELA_SSH_PORT: ${{ inputs.ssh-port }}
       run: ${{ github.action_path }}/scripts/ssh-setup.sh
+
+    # After setup-node, so it lands beside the Node the build runs on and stays
+    # on PATH for the deploy step, which builds with it. Installed with npm
+    # rather than corepack: Node 25 and later no longer ship corepack.
+    - name: Set up pnpm
+      if: steps.project.outputs.manager == 'pnpm'
+      shell: bash
+      env:
+        VELA_PNPM_VERSION: ${{ steps.project.outputs.pnpm-version }}
+      run: |
+        npm install --global "pnpm@${VELA_PNPM_VERSION:-latest}"
+        echo "pnpm $(pnpm --version)"
 
     - name: Install dependencies
       if: inputs.install == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: npm ci
+      env:
+        VELA_MANAGER: ${{ steps.project.outputs.manager }}
+      run: |
+        if [ "$VELA_MANAGER" = pnpm ]; then
+          pnpm install --frozen-lockfile
+        else
+          npm ci
+        fi
 
     - name: Deploy
       id: deploy
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        VELA_SERVER: ${{ inputs.server }}
+        VELA_SERVER: ${{ steps.project.outputs.server }}
+        VELA_RESOLVED_TARGET: ${{ steps.project.outputs.target }}
         VELA_TARGET: ${{ inputs.target }}
         VELA_ENVIRONMENT: ${{ inputs.environment }}
         VELA_DOMAIN: ${{ inputs.domain }}
