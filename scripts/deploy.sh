@@ -8,34 +8,12 @@
 # with locally.
 set -euo pipefail
 
-# CI must never mint a project identity. `vela` writes a fresh app id into
-# .vela/project.json whenever it finds none, and a runner's copy of the
-# repository is thrown away at the end of the job - so every deploy would land
-# as a brand new app and leave the previous one orphaned on the server, with its
-# own database, ports and systemd units.
-#
-# The file is created by the first `vela deploy` (or `vela link`) run locally,
-# and belongs in version control.
-PROJECT_FILE=.vela/project.json
-if [ ! -f "$PROJECT_FILE" ] || [ -z "$(jq -r '.appId // .projectId // ""' "$PROJECT_FILE" 2>/dev/null)" ]; then
-	echo "::error title=No vela project id::$PROJECT_FILE is missing or has no app id"
-	cat >&2 <<-'MSG'
+# shellcheck source=scripts/lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-		This project has no committed vela identity, so deploying from CI would
-		create a new app on every run.
-
-		Set it up once from a checkout on your own machine:
-
-		  vela link
-		  vela deploy --server <user@server> --domain <your-domain>
-		  git add .vela/project.json && git commit -m "Add the vela project id"
-
-		Then re-run this workflow. (`vela link` is what previews and the
-		velastack.dev dashboard need; a plain deploy works without it.)
-
-	MSG
-	exit 1
-fi
+# Checked again here although the first step did: with a `server` input that
+# step has no reason to open the file, and this is the step that would mint.
+require_project_identity || exit 1
 
 if [ -n "${VELA_CLI_VERSION:-}" ]; then
 	# A bare version means npm; anything with a slash or scheme (github:owner/repo,
@@ -53,28 +31,14 @@ else
 	VELA=(npx --yes vela)
 fi
 
-# Which copy of the app. `target` is the input; `environment` is what it used
-# to be called and still works. Given neither, the event decides: a pull
-# request gets a preview of its branch, anything else is production.
+# Which copy of the app: the `target` input, else a preview of the pull
+# request's branch, else production. Resolved by the first step, which needed
+# it to find the server; worked out here only when that step did not run.
 is_pull_request=0
 case "${VELA_EVENT_NAME:-}" in pull_request*) is_pull_request=1 ;; esac
 
-if [ -n "${VELA_TARGET:-}" ]; then
-	TARGET=$VELA_TARGET
-elif [ -n "${VELA_ENVIRONMENT:-}" ]; then
-	TARGET=$VELA_ENVIRONMENT
-elif [ "$is_pull_request" = 1 ]; then
-	# A pull request with no branch name is not a thing that should happen, and
-	# the one target it must never quietly become is production: on a `closed`
-	# event that would remove the live site.
-	if [ -z "${VELA_HEAD_REF:-}" ]; then
-		echo "::error title=No branch for the preview::the pull request event carries no head ref, so there is no preview to name"
-		exit 1
-	fi
-	TARGET="preview:$VELA_HEAD_REF"
-else
-	TARGET=production
-fi
+TARGET=${VELA_RESOLVED_TARGET:-}
+if [ -z "$TARGET" ]; then TARGET=$(resolve_target); fi
 
 is_preview=0
 case "$TARGET" in preview:*) is_preview=1 ;; esac
